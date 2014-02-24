@@ -9,11 +9,14 @@
 
 #define EVENT_BUFSIZE 1024
 
-static inline struct file_entry* file_entry_get(struct file_entry* entry)
-{
-    atomic_inc(&entry->refcount);
-    return entry;
-}
+struct event_handler_item {
+    struct list_node node;
+    struct event_handler* handler;
+};
+
+#define oom_exit() exit(EXIT_FAILURE)
+
+/* ------------------------------------------------------------------------- */
 
 static inline void handle_event_create(struct event_handler* h,
                                        const char* dir_path,
@@ -47,24 +50,49 @@ static inline void handle_event_destructor(struct event_handler* h,
         h->ops->destructor(h, dir_path, fname);
 }
 
-static void __kill_all_handler(struct file_entry* entry,
-                               const char* dir_path,
-                               event_handler_func_t func)
+static void for_each_handler_safe(struct file_entry* entry,
+                                  const char* dir_path,
+                                  event_handler_func_t func)
 {
     struct list_node *node, *next;
 
+    pthread_rwlock_wrlock(&entry->f_lock);
     list_for_each_safe (node, next, &entry->handler_list) {
         struct event_handler_item* item;
         item = list_entry(node, struct event_handler_item, node);
         func(item->handler, dir_path, entry->name);
         mm_free(item);
     }
+    pthread_rwlock_unlock(&entry->f_lock);
 }
 
-static inline void __file_entry_kill(struct dir_monitor* d,
-                                     struct file_entry* entry)
+static void for_each_handler(struct file_entry* entry,
+                             const char* dir_path,
+                             event_handler_func_t func)
 {
-    __kill_all_handler(entry, d->path, handle_event_destructor);
+    struct list_node* node;
+
+    pthread_rwlock_rdlock(&entry->f_lock);
+    list_for_each (node, &entry->handler_list) {
+        struct event_handler_item* item;
+        item = list_entry(node, struct event_handler_item, node);
+        func(item->handler, dir_path, entry->name);
+    }
+    pthread_rwlock_unlock(&entry->f_lock);
+}
+
+/* ------------------------------------------------------------------------- */
+
+static inline struct file_entry* file_entry_get(struct file_entry* entry)
+{
+    atomic_inc(&entry->refcount);
+    return entry;
+}
+
+static inline void __file_entry_destroy(struct dir_monitor* d,
+                                        struct file_entry* entry)
+{
+    for_each_handler_safe(entry, d->path, handle_event_destructor);
     pthread_rwlock_destroy(&entry->f_lock);
     mm_free(entry);
 }
@@ -73,7 +101,7 @@ static inline void file_entry_put(struct dir_monitor* d,
                                   struct file_entry* entry)
 {
     if (atomic_dec_return(&entry->refcount) == 0)
-        __file_entry_kill(d, entry);
+        __file_entry_destroy(d, entry);
 }
 
 static inline struct file_entry* __get_file_entry_by_wd(struct dir_monitor* d,
@@ -143,7 +171,7 @@ static inline int inotify_add_new_entry(struct dir_monitor* d,
 
     fpath = mm_alloc(strlen(d->path) + 1 + strlen(fname) + 1);
     if (!fpath)
-        exit(EXIT_FAILURE);
+        oom_exit();
 
     sprintf(fpath, "%s/%s", d->path, fname);
     wd = inotify_add_watch(d->fd, fpath,
@@ -153,20 +181,26 @@ static inline int inotify_add_new_entry(struct dir_monitor* d,
     return wd;
 }
 
-static void for_each_handler(struct file_entry* entry,
-                             const char* dir_path,
-                             event_handler_func_t func)
+static inline struct file_entry* file_entry_init(struct dir_monitor* d,
+                                                 const char* fname)
 {
-    struct list_node* node;
+    struct file_entry* entry;
 
-    pthread_rwlock_rdlock(&entry->f_lock);
-    list_for_each (node, &entry->handler_list) {
-        struct event_handler_item* item;
-        item = list_entry(node, struct event_handler_item, node);
-        func(item->handler, dir_path, entry->name);
-    }
-    pthread_rwlock_unlock(&entry->f_lock);
+    entry = mm_alloc(sizeof(struct file_entry) + strlen(fname) + 1);
+    if (!entry)
+        oom_exit();
+
+    atomic_set(&entry->refcount, 0);
+    list_init(&entry->node);
+    list_init(&entry->handler_list);
+    pthread_rwlock_init(&entry->f_lock, NULL);
+    strcpy(entry->name, fname);
+    entry->wd = inotify_add_new_entry(d, fname);
+
+    return entry;
 }
+
+/* ------------------------------------------------------------------------- */
 
 static inline void on_modify(struct dir_monitor* d,
                              struct inotify_event* e)
@@ -279,7 +313,7 @@ struct dir_monitor* dir_monitor_init(const char* dir_path)
 
     d = mm_alloc(sizeof(struct dir_monitor) + strlen(dir_path) + 1);
     if (!d)
-        exit(EXIT_FAILURE);
+        oom_exit();
 
     d->fd = inotify_init();
     if (d->fd == -1) {
@@ -314,18 +348,6 @@ err:
     return NULL;
 }
 
-static inline void file_entry_init(struct file_entry* entry,
-                                   struct dir_monitor* d,
-                                   const char* fname)
-{
-    atomic_set(&entry->refcount, 0);
-    list_init(&entry->node);
-    list_init(&entry->handler_list);
-    pthread_rwlock_init(&entry->f_lock, NULL);
-    strcpy(entry->name, fname);
-    entry->wd = inotify_add_new_entry(d, fname);
-}
-
 static inline void __dir_monitor_add_entry(struct dir_monitor* d,
                                            struct file_entry* entry)
 {
@@ -345,7 +367,7 @@ int dir_monitor_add_handler(struct dir_monitor* d, const char* fname,
 
     node = mm_alloc(sizeof(struct event_handler_item));
     if (!node)
-        exit(EXIT_FAILURE);
+        oom_exit();
 
     node->handler = h;
 
@@ -359,11 +381,7 @@ int dir_monitor_add_handler(struct dir_monitor* d, const char* fname,
         return 0;
     }
 
-    entry = mm_alloc(sizeof(struct file_entry) + strlen(fname) + 1);
-    if (!entry)
-        exit(EXIT_FAILURE);
-
-    file_entry_init(entry, d, fname);
+    entry = file_entry_init(d, fname);
 
     list_add_prev(&node->node, &entry->handler_list);
 
@@ -442,9 +460,9 @@ void dir_monitor_destroy(struct dir_monitor* d)
     list_for_each_safe (node, next, &d->entry_list) {
         struct file_entry* entry = list_entry(node, struct file_entry, node);
         __dir_monitor_del_entry(d, entry);
-        /* killing an entry withcout checking its refcount. pthread_cancel()
+        /* destroy an entry withcout checking its refcount. pthread_cancel()
          * may kill the monitor thread before file_entry_put() is called. */
-        __file_entry_kill(d, entry);
+        __file_entry_destroy(d, entry);
     }
 
     pthread_rwlock_destroy(&d->entry_list_lock);

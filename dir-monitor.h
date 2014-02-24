@@ -16,11 +16,6 @@ struct dir_monitor {
     char path[0];
 };
 
-struct event_handler_item {
-    struct list_node node;
-    struct event_handler* handler;
-};
-
 struct file_entry {
     int wd; /* protected by f_lock */
     struct list_node handler_list; /* protected by f_lock */
