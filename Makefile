@@ -1,10 +1,12 @@
 CC := gcc
 
 ifeq ($(release), y)
-    CFLAGS := -O2 -Wall -Werror
+    CFLAGS := -O2 -DNDEBUG
 else
-    CFLAGS := -g -Wall -Werror
+    CFLAGS := -g
 endif
+
+CFLAGS := $(CFLAGS) -Wall -Werror
 
 INCLUDE :=
 LIBS := -lpthread
@@ -13,13 +15,13 @@ SRC := $(wildcard *.c)
 OBJS := $(patsubst %.c, %.o, $(SRC))
 DEF := $(patsubst %.c, %.d, $(SRC))
 
-TARGET := test-dir-monitor
+TARGET := test_dir_monitor
 
 .PHONY: all clean
 
 all: $(TARGET)
 
-test-dir-monitor: $(OBJS)
+$(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
 
 .c.o:
