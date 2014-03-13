@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <sys/inotify.h>
 
-#include "dir-monitor.h"
+#include "dir_monitor.h"
 #include "../mm/mm.h"
 
 #define EVENT_BUFSIZE 1024

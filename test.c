@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "dir-monitor.h"
+#include "dir_monitor.h"
 
 /* ------------------------------------------------------------------------- */
 
