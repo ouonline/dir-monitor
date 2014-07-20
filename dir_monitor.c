@@ -5,7 +5,6 @@
 #include <sys/inotify.h>
 
 #include "dir_monitor.h"
-#include "../mm/mm.h"
 
 #define EVENT_BUFSIZE 1024
 
@@ -61,7 +60,7 @@ static void for_each_handler_safe(struct file_entry* entry,
         struct event_handler_item* item;
         item = list_entry(node, struct event_handler_item, node);
         func(item->handler, dir_path, entry->name);
-        mm_free(item);
+        free(item);
     }
     pthread_rwlock_unlock(&entry->f_lock);
 }
@@ -94,7 +93,7 @@ static inline void __file_entry_destroy(struct dir_monitor* d,
 {
     for_each_handler_safe(entry, d->path, handle_event_destructor);
     pthread_rwlock_destroy(&entry->f_lock);
-    mm_free(entry);
+    free(entry);
 }
 
 static inline void file_entry_put(struct dir_monitor* d,
@@ -169,14 +168,14 @@ static inline int inotify_add_new_entry(struct dir_monitor* d,
     int wd;
     char* fpath;
 
-    fpath = mm_alloc(strlen(d->path) + 1 + strlen(fname) + 1);
+    fpath = malloc(strlen(d->path) + 1 + strlen(fname) + 1);
     if (!fpath)
         oom_exit();
 
     sprintf(fpath, "%s/%s", d->path, fname);
     wd = inotify_add_watch(d->fd, fpath,
                            IN_CLOSE_WRITE | IN_DELETE_SELF);
-    mm_free(fpath);
+    free(fpath);
 
     return wd;
 }
@@ -186,7 +185,7 @@ static inline struct file_entry* file_entry_init(struct dir_monitor* d,
 {
     struct file_entry* entry;
 
-    entry = mm_alloc(sizeof(struct file_entry) + strlen(fname) + 1);
+    entry = malloc(sizeof(struct file_entry) + strlen(fname) + 1);
     if (!entry)
         oom_exit();
 
@@ -311,7 +310,7 @@ struct dir_monitor* dir_monitor_init(const char* dir_path)
     if (!dir_path)
         return NULL;
 
-    d = mm_alloc(sizeof(struct dir_monitor) + strlen(dir_path) + 1);
+    d = malloc(sizeof(struct dir_monitor) + strlen(dir_path) + 1);
     if (!d)
         oom_exit();
 
@@ -344,7 +343,7 @@ err1:
     pthread_rwlock_destroy(&d->entry_list_lock);
     close(d->fd);
 err:
-    mm_free(d);
+    free(d);
     return NULL;
 }
 
@@ -365,7 +364,7 @@ int dir_monitor_add_handler(struct dir_monitor* d, const char* fname,
     if (!d || !fname || !h)
         return -1;
 
-    node = mm_alloc(sizeof(struct event_handler_item));
+    node = malloc(sizeof(struct event_handler_item));
     if (!node)
         oom_exit();
 
@@ -410,7 +409,7 @@ void dir_monitor_del_handler(struct dir_monitor* d, const char* fname,
         item = list_entry(node, struct event_handler_item, node);
         if (item->handler == h) {
             __list_del(node);
-            mm_free(item);
+            free(item);
             goto end;
         }
     }
@@ -468,5 +467,5 @@ void dir_monitor_destroy(struct dir_monitor* d)
     pthread_rwlock_destroy(&d->entry_list_lock);
 
     close(d->fd);
-    mm_free(d);
+    free(d);
 }
