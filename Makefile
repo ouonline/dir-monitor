@@ -8,7 +8,7 @@ endif
 
 CFLAGS := $(CFLAGS) -Wall -Werror
 
-INCLUDE :=
+INCLUDE := -I../utils
 LIBS := -lpthread
 
 SRC := $(wildcard *.c)

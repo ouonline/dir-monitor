@@ -3,8 +3,8 @@
 
 #include <pthread.h>
 
-#include "../kernel-utils/list.h"
-#include "../kernel-utils/atomic.h"
+#include "list.h"
+#include "atomic.h"
 
 struct dir_monitor {
     int fd;
