@@ -6,24 +6,28 @@
 static void test_create(struct event_handler* h, const char* dir_path,
                         const char* fname)
 {
+    (void)h;
     printf("File %s/%s is created.\n", dir_path, fname);
 }
 
 static void test_modify(struct event_handler* h, const char* dir_path,
                         const char* fname)
 {
+    (void)h;
     printf("File %s/%s is modified.\n", dir_path, fname);
 }
 
 static void test_remove(struct event_handler* h, const char* dir_path,
                         const char* fname)
 {
+    (void)h;
     printf("File %s/%s is removed.\n", dir_path, fname);
 }
 
 static void test_destructor(struct event_handler* h, const char* dir_path,
                             const char* fname)
 {
+    (void)h;
     printf("monitor for %s/%s is removed.\n", dir_path, fname);
 }
 

@@ -6,14 +6,13 @@ else
     CFLAGS := -O2 -DNDEBUG
 endif
 
-CFLAGS := $(CFLAGS) -Wall -Werror
+CFLAGS := $(CFLAGS) -Wall -Werror -Wextra
 
-INCLUDE := -I../utils
+INCLUDE := -Iutils
 LIBS := -lpthread
 
 SRC := $(wildcard *.c)
 OBJS := $(patsubst %.c, %.o, $(SRC))
-DEF := $(patsubst %.c, %.d, $(SRC))
 
 TARGET := test_dir_monitor
 
@@ -27,12 +26,5 @@ $(TARGET): $(OBJS)
 .c.o:
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
-sinclude $(DEF)
-%.d:%.c
-	@set -e; rm -f $@; \
-	    $(CC) -MM $(INCLUDE) $< > $@.$$$$; \
-	    sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
-	    rm -f $@.$$$$
-
 clean:
-	rm -f $(OBJS) $(DEF) $(TARGET) *.d.*
+	rm -f $(OBJS) $(TARGET)
