@@ -1,30 +1,43 @@
 CC := gcc
+AR := ar
 
 ifeq ($(debug), y)
     CFLAGS := -g
 else
     CFLAGS := -O2 -DNDEBUG
 endif
+CFLAGS := $(CFLAGS) -Wall -Werror -Wextra -fPIC
 
-CFLAGS := $(CFLAGS) -Wall -Werror -Wextra
+ifndef DEPSDIR
+    DEPSDIR := $(shell pwd)/..
+endif
 
-INCLUDE :=
+MODULE_NAME := dirmonitor
+
+INCLUDE := -I$(DEPSDIR)
 LIBS := -lpthread
 
-SRC := $(wildcard *.c)
-OBJS := $(patsubst %.c, %.o, $(SRC))
+OBJS := $(patsubst %.c, %.o, $(wildcard *.c))
 
-TARGET := test_dir_monitor
+TARGET := lib$(MODULE_NAME).a lib$(MODULE_NAME).so
 
-.PHONY: all clean
+.PHONY: all clean pre-process
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
+$(OBJS): | pre-process
+
+pre-process:
+	d=$(DEPSDIR)/utils; if ! [ -d $$d ]; then git clone https://github.com/ouonline/utils.git $$d; fi
+
+lib$(MODULE_NAME).a: $(OBJS)
+	$(AR) rc $@ $^
+
+lib$(MODULE_NAME).so: $(OBJS)
+	$(CC) -shared -o $@ $^ $(LIBS)
 
 .c.o:
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	rm -f $(TARGET) $(OBJS)
